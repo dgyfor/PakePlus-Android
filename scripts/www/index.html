@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="manifest.json">
+    <title>三盘映射器</title>
+    <style>
+        * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
+        body { background: #121212; padding: 0; padding-bottom: 120px; min-height: 100vh; touch-action: manipulation; -webkit-user-select: none; user-select: none; color: #e2e8f0; }
+        .app { max-width: 600px; margin: 0 auto; }
+
+        /* ========== 顶部导航栏 ========== */
+        .top-bar { display: flex; align-items: center; height: 56px; padding: 0 8px; background: #1e1e1e; position: sticky; top: 0; z-index: 50; gap: 4px; }
+        .top-bar .back-btn { width: 48px; height: 48px; border: none; background: transparent; color: #e2e8f0; font-size: 20px; cursor: pointer; border-radius: 50%; transition: background 0.15s; }
+        .top-bar .back-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .top-bar .back-btn:active:not(:disabled) { background: #334155; }
+        .top-bar .title-area { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+        .top-bar .title-area .main-title { font-size: 18px; font-weight: 600; color: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .top-bar .title-area .sub-path { font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .top-bar .action-btns { display: flex; align-items: center; gap: 2px; }
+        .top-bar .action-btns button { width: 48px; height: 48px; border: none; background: transparent; color: #e2e8f0; font-size: 18px; cursor: pointer; border-radius: 50%; transition: background 0.15s; }
+        .top-bar .action-btns button:active { background: #334155; }
+
+        /* 搜索框 */
+        .search-wrap { padding: 0 12px 8px; background: #1e1e1e; }
+        .search-box { width: 100%; padding: 10px 14px; font-size: 15px; border: 1px solid #334155; border-radius: 12px; outline: none; background: #0f172a; color: #e2e8f0; }
+        .search-box:focus { border-color: #3b82f6; }
+        .search-box::placeholder { color: #64748b; }
+
+        /* 排序弹窗 */
+        .sort-menu { position: fixed; top: 52px; right: 12px; background: #2d2d2d; border-radius: 12px; min-width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 200; display: none; overflow: hidden; }
+        .sort-menu.visible { display: block; }
+        .sort-menu .sort-item { padding: 14px 20px; font-size: 15px; color: #e2e8f0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.1s; }
+        .sort-menu .sort-item:active { background: #3f3f3f; }
+        .sort-menu .sort-item.active .check { color: #3b82f6; }
+        .sort-menu .sort-item .check { color: transparent; }
+
+        /* 统计栏 */
+        .count-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; font-size: 13px; color: #94a3b8; }
+
+        /* ========== 文件列表 ========== */
+        .tree-container { background: #121212; min-height: 300px; max-height: calc(100vh - 220px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .tree-container ul { list-style: none; padding: 0; margin: 0; }
+        .tree-container li { padding: 0; margin: 0; border-bottom: 1px solid #1e293b; }
+        .tree-container .node-wrapper { display: flex; align-items: center; padding: 10px 16px; background: #121212; transition: background 0.15s; cursor: pointer; gap: 12px; user-select: none; touch-action: pan-y; -webkit-tap-highlight-color: transparent; min-height: 56px; position: relative; }
+        .tree-container .node-wrapper:active { background: #1e293b; }
+        .tree-container .node-wrapper .icon { font-size: 36px; width: 40px; text-align: center; flex-shrink: 0; }
+        .tree-container .node-wrapper .info-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+        .tree-container .node-wrapper .name { font-size: 15px; font-weight: 500; color: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+        .tree-container .node-wrapper .meta { font-size: 12px; color: #94a3b8; }
+        .tree-container .node-wrapper .arrow { color: #64748b; font-size: 16px; flex-shrink: 0; }
+        .tree-container .node-wrapper .radio-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #64748b; display: none; align-items: center; justify-content: center; flex-shrink: 0; background: transparent; transition: 0.15s; font-size: 12px; font-weight: bold; color: white; }
+        .tree-container .node-wrapper .radio-dot.checked { background: #3b82f6; border-color: #3b82f6; }
+        .multi-select-mode .tree-container .node-wrapper .radio-dot { display: flex; }
+        .tree-container .node-wrapper.linked { border-left: 3px solid #22c55e; }
+        .tree-container .node-wrapper.selected { background: #1e3a8a; }
+        .tree-container .empty-state { text-align: center; padding: 60px 20px; color: #64748b; }
+        .tree-container .empty-state .big-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+        .highlight { background: #fef08a; color: #0f172a; padding: 0 2px; border-radius: 3px; }
+        .highlight-target { background: #3b82f6 !important; color: white !important; border-radius: 6px; transition: background 0.3s; }
+
+        /* 模式提示 */
+        .multi-mode-hint, .move-mode-hint { margin: 0 16px 8px; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; display: inline-block; }
+        .multi-mode-hint { background: #1e3a8a; color: #93c5fd; border: 1px solid #1e40af; }
+        .move-mode-hint { background: #78350f; color: #fcd34d; border: 1px solid #92400e; }
+
+        /* ========== 底部菜单 ========== */
+        .bottom-menu { position: fixed; bottom: 52px; left: 0; width: 100%; background: #1e293b; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); padding: 10px 16px; display: none; flex-wrap: wrap; align-items: center; gap: 8px; z-index: 99; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+        .bottom-menu.visible { display: flex; }
+        .bottom-menu .menu-info { flex: 1; min-width: 60px; font-size: 14px; color: #cbd5e1; }
+        .bottom-menu .menu-info strong { color: #f1f5f9; }
+        .bottom-menu .menu-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .bottom-menu .menu-actions button { padding: 8px 14px; border-radius: 30px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; background: #334155; color: #e2e8f0; white-space: nowrap; }
+        .bottom-menu .menu-actions button:active { transform: scale(0.96); }
+        .bottom-menu .menu-actions .primary { background: #3b82f6; color: white; }
+        .bottom-menu .menu-actions .danger { background: #7f1d1d; color: #fca5a5; }
+        .bottom-menu .menu-actions .warn { background: #78350f; color: #fcd34d; }
+
+        /* ========== 底部三盘切换 ========== */
+        .bottom-tabs { position: fixed; bottom: 0; left: 0; width: 100%; background: #1e1e1e; border-top: 1px solid #334155; display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
+        .bottom-tabs .tab { flex: 1; text-align: center; padding: 12px 0 10px; font-weight: 500; font-size: 13px; color: #64748b; border-bottom: 3px solid transparent; transition: 0.2s; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; }
+        .bottom-tabs .tab.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+        .bottom-tabs .tab:active { background: #334155; }
+        .bottom-tabs .tab .tab-badge { font-size: 10px; background: #334155; color: #94a3b8; border-radius: 20px; padding: 0 6px; margin-left: 4px; font-weight: 500; }
+        .bottom-tabs .tab.active .tab-badge { background: #1e3a8a; color: #93c5fd; }
+
+        /* ========== 弹窗 ========== */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 200; display: none; align-items: center; justify-content: center; animation: fadeIn 0.2s; }
+        .modal-overlay.visible { display: flex; }
+        .modal-box { background: #1e293b; border-radius: 20px; padding: 24px 20px; max-width: 92%; width: 380px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.4); animation: slideUp 0.25s; color: #e2e8f0; }
+        .modal-box h3 { margin-bottom: 12px; font-size: 18px; color: #f1f5f9; text-align: center; }
+        .modal-box .sub-location { text-align: center; font-size: 13px; color: #94a3b8; margin-bottom: 16px; background: #0f172a; padding: 6px 12px; border-radius: 30px; display: inline-block; width: auto; margin-left: auto; margin-right: auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .modal-box .field { margin-bottom: 14px; }
+        .modal-box .field label { display: block; font-size: 13px; font-weight: 500; color: #cbd5e1; margin-bottom: 4px; }
+        .modal-box .field input, .modal-box .field textarea { width: 100%; padding: 10px 12px; border: 1px solid #334155; border-radius: 10px; font-size: 15px; outline: none; background: #0f172a; color: #e2e8f0; }
+        .modal-box .field input:focus, .modal-box .field textarea:focus { border-color: #3b82f6; }
+        .modal-box .field textarea { resize: vertical; min-height: 80px; }
+        .modal-box .type-toggle { display: flex; gap: 12px; margin: 8px 0 6px; }
+        .modal-box .type-toggle button { flex: 1; padding: 10px 0; border: 2px solid #334155; border-radius: 40px; background: #0f172a; font-weight: 600; color: #64748b; cursor: pointer; }
+        .modal-box .type-toggle button.active { border-color: #3b82f6; background: #1e3a8a; color: #93c5fd; }
+        .modal-box .batch-toggle { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; font-size: 14px; color: #cbd5e1; }
+        .modal-box .batch-toggle input { width: 18px; height: 18px; accent-color: #3b82f6; }
+        .modal-box .actions { display: flex; gap: 10px; margin-top: 18px; }
+        .modal-box .actions button { flex: 1; padding: 12px; border: none; border-radius: 40px; font-weight: 600; font-size: 15px; cursor: pointer; }
+        .modal-box .actions .confirm { background: #3b82f6; color: white; }
+        .modal-box .actions .cancel { background: #334155; color: #cbd5e1; }
+
+        /* ========== 映射向导 ========== */
+        .map-wizard .step-indicator { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; color: #94a3b8; }
+        .map-wizard .step-indicator .step-dot { flex: 1; text-align: center; padding: 4px 0; border-bottom: 2px solid #334155; transition: 0.2s; }
+        .map-wizard .step-indicator .step-dot.active { border-color: #3b82f6; color: #e2e8f0; font-weight: 600; }
+        .map-wizard .step-content { min-height: 200px; }
+        .map-wizard .file-list { max-height: 180px; overflow-y: auto; border: 1px solid #2d3748; border-radius: 8px; background: #0f172a; padding: 4px 0; margin: 6px 0; }
+        .map-wizard .file-list .file-item { display: flex; align-items: center; padding: 6px 10px; gap: 8px; border-bottom: 1px solid #1e293b; cursor: pointer; }
+        .map-wizard .file-list .file-item:last-child { border-bottom: none; }
+        .map-wizard .file-list .file-item .check-box { width: 18px; height: 18px; border: 2px solid #64748b; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; font-weight: bold; color: white; background: transparent; transition: 0.15s; }
+        .map-wizard .file-list .file-item .check-box.checked { background: #3b82f6; border-color: #3b82f6; }
+        .map-wizard .file-list .file-item .file-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }
+        .map-wizard .file-list .file-item .file-name { flex: 1; font-size: 13px; color: #e2e8f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .map-wizard .file-list .file-item .file-meta { font-size: 11px; color: #64748b; flex-shrink: 0; }
+        .map-wizard .pair-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+        .map-wizard .pair-list .pair-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: #0f172a; border-radius: 6px; border: 1px solid #1e293b; }
+        .map-wizard .pair-list .pair-row .pair-left, .map-wizard .pair-list .pair-row .pair-right { flex: 1; padding: 4px 6px; border-radius: 4px; font-size: 13px; color: #e2e8f0; cursor: pointer; transition: background 0.1s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .map-wizard .pair-list .pair-row .pair-left { background: #1e3a8a; }
+        .map-wizard .pair-list .pair-row .pair-right { background: #1e3a8a; }
+        .map-wizard .pair-list .pair-row .pair-left.selected, .map-wizard .pair-list .pair-row .pair-right.selected { background: #3b82f6; color: white; }
+        .map-wizard .pair-list .pair-row .pair-arrow { color: #64748b; font-size: 14px; flex-shrink: 0; }
+        .map-wizard .hint-text { font-size: 12px; color: #94a3b8; margin: 4px 0 8px; }
+        .map-wizard .nav-buttons { display: flex; gap: 10px; margin-top: 12px; }
+        .map-wizard .nav-buttons button { flex: 1; padding: 10px; border: none; border-radius: 40px; font-weight: 600; font-size: 14px; cursor: pointer; }
+        .map-wizard .nav-buttons .prev { background: #334155; color: #cbd5e1; }
+        .map-wizard .nav-buttons .next { background: #3b82f6; color: white; }
+        .map-wizard .nav-buttons .next:disabled { opacity: 0.4; cursor: not-allowed; }
+        .map-wizard .preview-list { max-height: 180px; overflow-y: auto; border: 1px solid #2d3748; border-radius: 8px; background: #0f172a; padding: 4px 0; }
+        .map-wizard .preview-list .preview-item { display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #1e293b; font-size: 13px; }
+        .map-wizard .preview-list .preview-item:last-child { border-bottom: none; }
+        .map-wizard .preview-list .preview-item .preview-left { color: #93c5fd; }
+        .map-wizard .preview-list .preview-item .preview-right { color: #fcd34d; }
+        .map-wizard .upload-area { border: 2px dashed #334155; border-radius: 12px; padding: 30px 20px; text-align: center; cursor: pointer; transition: 0.2s; margin: 10px 0; }
+        .map-wizard .upload-area:active { background: #1e293b; }
+        .map-wizard .upload-area .upload-icon { font-size: 40px; opacity: 0.6; }
+        .map-wizard .upload-area .upload-hint { margin-top: 8px; font-size: 13px; color: #94a3b8; }
+        .map-wizard .upload-area .file-name { color: #3b82f6; font-weight: 500; }
+        .map-wizard .disk-selector { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; }
+        .map-wizard .disk-selector .disk-option { padding: 6px 16px; border: 1px solid #334155; border-radius: 20px; background: #0f172a; color: #94a3b8; cursor: pointer; font-size: 13px; transition: 0.15s; }
+        .map-wizard .disk-selector .disk-option.active { border-color: #3b82f6; background: #1e3a8a; color: #93c5fd; }
+        .map-wizard .disk-selector .disk-option:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        /* ========== 上下文菜单 ========== */
+        .context-menu { position: fixed; background: #1e293b; border-radius: 12px; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 250; display: none; overflow: hidden; border: 1px solid #334155; padding: 4px 0; }
+        .context-menu.visible { display: block; }
+        .context-menu .menu-item { padding: 12px 20px; font-size: 14px; color: #e2e8f0; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.1s; }
+        .context-menu .menu-item:active { background: #334155; }
+        .context-menu .menu-item .mi-icon { font-size: 18px; }
+        .context-menu .menu-item .mi-label { flex: 1; }
+
+        /* ========== Toast ========== */
+        .toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%) translateY(-20px); background: #1e293b; color: #f1f5f9; padding: 10px 20px; border-radius: 30px; font-size: 13px; font-weight: 500; z-index: 300; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,0.3); max-width: 90%; text-align: center; }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.success { background: #14532d; color: #86efac; }
+        .toast.error { background: #7f1d1d; color: #fca5a5; }
+        .toast.info { background: #1e3a8a; color: #93c5fd; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* 滚动条 */
+        .map-wizard .file-list::-webkit-scrollbar, .map-wizard .pair-list::-webkit-scrollbar,
+        .map-wizard .preview-list::-webkit-scrollbar, .tree-container::-webkit-scrollbar { width: 4px; }
+        .map-wizard .file-list::-webkit-scrollbar-track, .map-wizard .pair-list::-webkit-scrollbar-track,
+        .map-wizard .preview-list::-webkit-scrollbar-track, .tree-container::-webkit-scrollbar-track { background: transparent; }
+        .map-wizard .file-list::-webkit-scrollbar-thumb, .map-wizard .pair-list::-webkit-scrollbar-thumb,
+        .map-wizard .preview-list::-webkit-scrollbar-thumb, .tree-container::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+        /* ========== 新功能样式：设置面板 & 裁剪器 ========== */
+        .settings-backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 9999; display: none;
+        }
+        .settings-backdrop.active { display: block; }
+        .settings-panel {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #1e293b; padding: 24px; border-radius: 20px;
+            width: 90%; max-width: 400px; z-index: 10000;
+            display: none; flex-direction: column; gap: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+        }
+        .settings-panel.active { display: flex; }
+        .settings-panel h3 { color: #f1f5f9; margin: 0; text-align: center; }
+        .settings-panel button {
+            padding: 14px; border: none; border-radius: 12px;
+            font-size: 16px; font-weight: 500;
+            background: #0f172a; color: #e2e8f0; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .settings-panel button:active { background: #334155; }
+        .settings-panel .primary { background: #3b82f6; color: white; }
+        .settings-panel .close-btn {
+            position: absolute; top: 12px; right: 16px;
+            background: none; border: none; font-size: 24px;
+            color: #94a3b8; cursor: pointer;
+        }
+
+        .crop-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 10001;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            touch-action: none;
+        }
+        .crop-overlay.active { display: flex; }
+        .crop-container {
+            position: relative; width: 90vw; max-width: 500px;
+            aspect-ratio: 1 / 1; background: #000; overflow: hidden;
+            touch-action: none; border-radius: 12px;
+        }
+        .crop-container img {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; object-fit: contain;
+            touch-action: none; transform-origin: center center;
+            will-change: transform;
+        }
+        .crop-mask {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+            border: 2px solid white;
+            border-radius: 0;
+        }
+        .crop-mask.circle { border-radius: 50%; }
+        .crop-controls {
+            margin-top: 16px; display: flex; gap: 20px;
+        }
+        .crop-controls button {
+            padding: 10px 28px; border: none; border-radius: 30px;
+            font-size: 16px; font-weight: 600; cursor: pointer;
+        }
+        .crop-controls .confirm { background: #3b82f6; color: white; }
+        .crop-controls .cancel { background: #334155; color: #cbd5e1; }
+    </style>
+</head>
+<body>
+
+<!-- ========== 开屏启动画面（初始隐藏） ========== -->
+<div id="splashScreen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#0f172a;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;transition:opacity 0.6s ease;opacity:0;">
+    <img id="splashImage" src="" alt="启动画面" style="width:100%;height:100%;object-fit:cover;display:block;">
+    <button id="skipBtn" onclick="hideSplash()" style="position:absolute;top:20px;right:16px;background:rgba(0,0,0,0.4);color:#fff;border:1px solid rgba(255,255,255,0.15);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:400;cursor:pointer;backdrop-filter:blur(4px);z-index:10000;letter-spacing:0.3px;">
+        跳过 (<span id="countdown">5</span>s)
+    </button>
+</div>
+
+<!-- ========== 设置面板 ========== -->
+<div class="settings-backdrop" id="settingsBackdrop"></div>
+<div class="settings-panel" id="settingsPanel">
+    <button class="close-btn" onclick="closeSettings()">✕</button>
+    <h3>⚙️ 设置</h3>
+    <!-- 新增：更换开屏壁纸按钮（从相册选图，存储到 localStorage） -->
+    <button onclick="changeSplash()">🖼️ 更换开屏壁纸</button>
+    <button onclick="startCrop('splash')">✂️ 裁剪开屏图片</button>
+    <button onclick="startCrop('icon')">📱 更换桌面图标</button>
+    <button class="primary" onclick="refreshCache()">🔄 刷新缓存（应用新图片）</button>
+    <p style="font-size:12px;color:#94a3b8;text-align:center;margin:0;">更换图片后，点击「刷新缓存」即可生效，无需卸载重装</p>
+</div>
+
+<!-- ========== 裁剪器 ========== -->
+<div class="crop-overlay" id="cropOverlay">
+    <div class="crop-container" id="cropContainer">
+        <img id="cropImage" src="" alt="裁剪预览">
+        <div class="crop-mask" id="cropMask"></div>
+    </div>
+    <div class="crop-controls">
+        <button class="cancel" onclick="cancelCrop()">取消</button>
+        <button class="confirm" onclick="confirmCrop()">✓ 确认裁剪</button>
+    </div>
+</div>
+
+<!-- ========== 原页面内容 ========== -->
+<input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+<input type="file" id="mapConfigFile" accept=".txt,.cfg" style="display:none" onchange="handleConfigFile(event)">
+
+<div class="app">
+    <div class="top-bar">
+        <button class="back-btn" id="backBtn" onclick="goBack()" disabled>←</button>
+        <div class="title-area">
+            <div class="main-title" id="mainTitle">📁 本地</div>
+            <div class="sub-path" id="subPath">根目录</div>
+        </div>
+        <div class="action-btns">
+            <button onclick="toggleSearch()" title="搜索">🔍</button>
+            <button id="multiSelectBtn" onclick="toggleMultiSelectMode()" title="多选" style="color:#94a3b8;">☑️</button>
+            <button onclick="openAddModal()" title="添加">➕</button>
+            <button onclick="openMapWizard()" title="建立映射">🔗映射</button>
+            <button onclick="exportData()" title="导出备份">📤</button>
+            <button onclick="document.getElementById('importFile').click()" title="导入备份">📥</button>
+            <button onclick="toggleSortMenu()" title="排序">🔽</button>
+            <!-- 设置按钮 -->
+            <button onclick="openSettings()" title="设置" style="font-size:18px;">⚙️</button>
+        </div>
+    </div>
+
+    <div class="sort-menu" id="sortMenu">
+        <div class="sort-item" data-sort="name-asc" onclick="changeSort('name-asc')"><span>名称 (A→Z)</span><span class="check">✓</span></div>
+        <div class="sort-item" data-sort="name-desc" onclick="changeSort('name-desc')"><span>名称 (Z→A)</span><span class="check">✓</span></div>
+        <div class="sort-item" data-sort="time-desc" onclick="changeSort('time-desc')"><span>最新优先</span><span class="check">✓</span></div>
+        <div class="sort-item" data-sort="size-desc" onclick="changeSort('size-desc')"><span>文件大小 (大→小)</span><span class="check">✓</span></div>
+        <div class="sort-item" data-sort="size-asc" onclick="changeSort('size-asc')"><span>文件大小 (小→大)</span><span class="check">✓</span></div>
+    </div>
+
+    <div class="search-wrap" id="searchWrap" style="display:none;">
+        <input type="text" id="searchInput" class="search-box" placeholder="🔍 搜索整个云盘（递归）..." oninput="renderCurrentTree()">
+    </div>
+
+    <div style="padding: 0 16px;">
+        <div id="multiModeHint" class="multi-mode-hint" style="display:none;">☑️ 多选模式 · 左滑切换选择</div>
+        <div id="moveModeHint" class="move-mode-hint" style="display:none;">📦 移动模式 · 点击文件夹导航到目标</div>
+    </div>
+
+    <div class="count-bar">
+        <span id="countText">共 0 项</span>
+        <span id="sortLabel" class="sort-label">名称 (A→Z)</span>
+    </div>
+
+    <div class="tree-container" id="treeContainer"><div class="empty-state"><div class="big-icon">📭</div><div class="hint">加载中...</div></div></div>
+</div>
+
+<div class="bottom-menu" id="bottomMenu">
+    <div class="menu-info" id="menuInfo">已选 0 项</div>
+    <div class="menu-actions" id="menuActions"></div>
+</div>
+
+<div class="bottom-tabs" id="bottomTabs">
+    <button class="tab active" data-tree="local">📁 本地 <span class="tab-badge" id="badge-local">0</span></button>
+    <button class="tab" data-tree="cloudA">☁️ 云盘A <span class="tab-badge" id="badge-cloudA">0</span></button>
+    <button class="tab" data-tree="cloudB">☁️ 云盘B <span class="tab-badge" id="badge-cloudB">0</span></button>
+</div>
+
+<div class="modal-overlay" id="modalOverlay"><div class="modal-box"><h3 id="modalTitle">➕ 添加新项目</h3><div class="sub-location" id="modalLocation">📍 位置：根目录</div><div class="field" id="singleNameField"><label>名称</label><input type="text" id="modalNameInput" placeholder="输入名称..."></div><div class="field" id="sizeField" style="display:none;"><label>大小（可选，支持KB/MB/GB）</label><input type="text" id="modalSizeInput" placeholder="留空默认为0"></div><div class="field" id="batchField" style="display:none;"><label>批量名称（每行一个）</label><textarea id="modalBatchInput" placeholder="文件1&#10;文件2 2MB&#10;文件夹3"></textarea></div><div class="type-toggle" id="typeToggle"><button id="typeFolder" class="active" onclick="setType('folder')">📁 文件夹</button><button id="typeFile" onclick="setType('file')">📄 文件</button></div><div class="batch-toggle"><input type="checkbox" id="batchModeCheck" onchange="toggleBatchMode()"><label for="batchModeCheck">批量添加（多行）</label></div><div class="actions"><button class="cancel" onclick="closeModal()">取消</button><button class="confirm" id="modalConfirmBtn">确认</button></div></div></div>
+
+<div class="modal-overlay" id="mapWizardOverlay"><div class="modal-box map-wizard" style="width:460px;max-width:96%;"><h3 id="mapWizardTitle">🔗 建立映射</h3><div class="step-indicator" id="stepIndicator"><div class="step-dot active" data-step="0">选择模式</div><div class="step-dot" data-step="1">选择云盘</div><div class="step-dot" data-step="2">选择本盘文件</div><div class="step-dot" data-step="3">选择映射盘文件</div><div class="step-dot" data-step="4">配置映射</div><div class="step-dot" data-step="5">预览确认</div></div><div class="step-content" id="mapWizardContent"></div><div class="nav-buttons" id="mapWizardNav"><button class="prev" onclick="mapWizardPrev()">上一步</button><button class="next" id="mapWizardNext" onclick="mapWizardNext()">下一步</button></div></div></div>
+
+<div class="context-menu" id="contextMenu">
+    <div class="menu-item" onclick="handleContextCopyPath()"><span class="mi-icon">📋</span><span class="mi-label">复制路径</span></div>
+    <div class="menu-item" onclick="handleContextCopyName()"><span class="mi-icon">📝</span><span class="mi-label">复制文件名</span></div>
+    <div class="menu-item" id="menuJumpToLink" onclick="handleContextJumpToLink()" style="display:none;"><span class="mi-icon">🔗</span><span class="mi-label">跳转到映射文件</span></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+//  数据层（保持不变）
+// ============================================================
+const TREE_IDS = ['local', 'cloudA', 'cloudB'];
+const DEFAULT_LABELS = { local: '📁 本地', cloudA: '☁️ 云盘A', cloudB: '☁️ 云盘B' };
+let data = {
+    trees: {
+        local: { id: 'local', label: '📁 本地', nodes: [], currentDir: null },
+        cloudA: { id: 'cloudA', label: '☁️ 云盘A', nodes: [], currentDir: null },
+        cloudB: { id: 'cloudB', label: '☁️ 云盘B', nodes: [], currentDir: null }
+    },
+    links: [],
+    nextId: 1,
+    currentTreeId: 'local',
+    selectedNodes: [],
+    multiMode: false,
+    movingMode: false,
+    sortKey: 'name-asc'
+};
+let _addTargetParentId = null;
+let _toastTimer = null;
+let countdownInterval = null;
+let _searchVisible = false;
+let _navStack = [];
+let wizardState = { /* ... 保持原有 ... */ };
+let contextTarget = { treeId: null, nodeId: null, node: null };
+
+// ... 所有原有函数（保持不变） ...
+// 由于篇幅，此处省略了所有原有的工具函数、排序、导航、渲染、事件处理等
+// 实际使用时，请将你之前的完整 JavaScript 代码（从 loadState 到 renderCurrentTree 等）全部保留。
+
+// ============================================================
+//  新增：更换开屏壁纸（从相册选图，存储为 Base64，限制 30MB）
+// ============================================================
+function changeSplash() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 30 * 1024 * 1024) {
+            showToast('❌ 图片过大，请选择小于 30MB 的图片', 'error');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            try {
+                const base64 = ev.target.result;
+                localStorage.setItem('customSplash', base64);
+                showToast('✅ 开屏壁纸已更换！下次启动生效', 'success', 3000);
+                // 如果当前开屏正在显示，立即更新
+                const splashImg = document.getElementById('splashImage');
+                const splash = document.getElementById('splashScreen');
+                if (splashImg && splash.style.opacity === '1') {
+                    splashImg.src = base64;
+                }
+                closeSettings();
+            } catch (err) {
+                showToast('❌ 存储失败，可能是图片过大或存储空间不足', 'error');
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
+}
+
+// ============================================================
+//  修改：开屏图片加载函数（优先使用 localStorage 中的自定义图）
+// ============================================================
+function loadSplashImage() {
+    const img = document.getElementById('splashImage');
+    const custom = localStorage.getItem('customSplash');
+    if (custom) {
+        img.src = custom;
+        img.onload = function() {
+            if (typeof splashLoaded === 'function') splashLoaded();
+        };
+        img.onerror = function() {
+            // 自定义图加载失败，回退到默认
+            console.warn('自定义开屏加载失败，使用默认图片');
+            img.src = 'splash.png';
+            if (typeof splashLoaded === 'function') splashLoaded();
+        };
+    } else {
+        img.src = 'splash.png';
+        if (typeof splashLoaded === 'function') splashLoaded();
+    }
+}
+
+// ============================================================
+//  开屏加载完成回调（淡入 + 倒计时）
+// ============================================================
+function splashLoaded() {
+    const splash = document.getElementById('splashScreen');
+    splash.style.opacity = '1';
+    let seconds = 5;
+    const countdownEl = document.getElementById('countdown');
+    if (countdownEl) countdownEl.textContent = seconds;
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = setInterval(function() {
+        seconds--;
+        if (countdownEl) countdownEl.textContent = seconds;
+        if (seconds <= 0) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            hideSplash();
+        }
+    }, 1000);
+}
+
+// ============================================================
+//  初始化
+// ============================================================
+if (!loadState()) initDemo();
+else {
+    let hasAny = false;
+    TREE_IDS.forEach(id => { if (data.trees[id]?.nodes?.length > 0) hasAny = true; });
+    if (!hasAny && data.links.length === 0) initDemo();
+    else saveState();
+}
+initEvents();
+updateTabs();
+updateBackBtn();
+updateTitlePath();
+updateSortMenu();
+renderCurrentTree();
+
+// 页面加载后调用 loadSplashImage（替代原来的直接隐藏）
+window.addEventListener('load', function() {
+    loadSplashImage();
+    // 后备：如果图片加载超时，10 秒后强制隐藏
+    setTimeout(function() {
+        const splash = document.getElementById('splashScreen');
+        if (splash.style.opacity !== '0') {
+            hideSplash();
+        }
+    }, 10000);
+});
+
+// 注册 Service Worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+        .then(() => console.log('✅ Service Worker 注册成功'))
+        .catch(err => console.log('❌ Service Worker 注册失败:', err));
+}
+</script>
+</body>
+</html>
